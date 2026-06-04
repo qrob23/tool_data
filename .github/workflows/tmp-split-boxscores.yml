@@ -1,0 +1,110 @@
+name: Split Boxscores By Team
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split-boxscores:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+
+      - name: Install packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::arrow
+            any::dplyr
+            any::purrr
+
+      - name: Split parquet files
+        shell: Rscript {0}
+        run: |
+
+          library(arrow)
+          library(dplyr)
+          library(purrr)
+
+          season_dir <- file.path("Data", "20252026")
+
+          dir.create(
+            season_dir,
+            recursive = TRUE,
+            showWarnings = FALSE
+          )
+
+          write_team_files <- function(df, dataset_name) {
+
+            split(df, df$teamId) |>
+              iwalk(function(team_df, team_id) {
+
+                team_dir <- file.path(
+                  season_dir,
+                  paste0("team_", team_id)
+                )
+
+                dir.create(
+                  team_dir,
+                  recursive = TRUE,
+                  showWarnings = FALSE
+                )
+
+                write_parquet(
+                  team_df,
+                  file.path(
+                    team_dir,
+                    paste0(dataset_name, ".parquet")
+                  )
+                )
+
+                message(
+                  "Wrote ",
+                  dataset_name,
+                  " for team ",
+                  team_id,
+                  " (",
+                  nrow(team_df),
+                  " rows)"
+                )
+              })
+          }
+
+          skaters <- read_parquet(
+            "boxscores_skaters_20252026.parquet"
+          )
+
+          goalies <- read_parquet(
+            "boxscores_goalies_20252026.parquet"
+          )
+
+          write_team_files(
+            skaters,
+            "boxscore_skaters"
+          )
+
+          write_team_files(
+            goalies,
+            "boxscore_goalies"
+          )
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Data/20252026
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Split boxscore files by team"
+            git push
+          fi
