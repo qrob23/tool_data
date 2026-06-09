@@ -1,0 +1,37 @@
+name: Delete Team Boxscore Files
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  delete-boxscores:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Delete team boxscore files
+        run: |
+          find Data/20252026 -type f -name "boxscore_skaters.parquet" -delete
+          find Data/20252026 -type f -name "boxscore_goalies.parquet" -delete
+
+          echo "Remaining boxscore files:"
+          find Data/20252026 \( -name "boxscore_skaters.parquet" -o -name "boxscore_goalies.parquet" \)
+
+      - name: Commit deletions
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add -A Data/20252026
+
+          if git diff --staged --quiet; then
+            echo "No files deleted."
+          else
+            git commit -m "Delete team boxscore files"
+            git push
+          fi
