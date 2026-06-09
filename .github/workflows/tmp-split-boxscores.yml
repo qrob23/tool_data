@@ -78,11 +78,11 @@ jobs:
           }
 
           skaters <- read_parquet(
-            "boxscores_skaters_20252026.parquet"
+            "boxscore_skaters_20252026.parquet"
           )
 
           goalies <- read_parquet(
-            "boxscores_goalies_20252026.parquet"
+            "boxscore_goalies_20252026.parquet"
           )
 
           write_team_files(
