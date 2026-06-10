@@ -33,7 +33,7 @@ jobs:
           library(dplyr)
           library(purrr)
 
-          season_dir <- file.path("Data", "20252026")
+          season_dir <- file.path("Data", "20242025")
 
           dir.create(
             season_dir,
@@ -78,11 +78,11 @@ jobs:
           }
 
           skaters <- read_parquet(
-            "boxscore_skaters_20252026.parquet"
+            "boxscore_skaters_20242025.parquet"
           )
 
           goalies <- read_parquet(
-            "boxscore_goalies_20252026.parquet"
+            "boxscore_goalies_20242025.parquet"
           )
 
           write_team_files(
@@ -100,7 +100,7 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
 
-          git add Data/20252026
+          git add Data/20242025
 
           if git diff --staged --quiet; then
             echo "No changes to commit."
