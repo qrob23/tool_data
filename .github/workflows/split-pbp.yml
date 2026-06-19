@@ -1,0 +1,80 @@
+name: Split PBP By Team
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split-pbp:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v4
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+
+      - name: Install packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            any::arrow
+            any::dplyr
+            any::purrr
+
+      - name: Split play-by-play parquet file
+        shell: Rscript {0}
+        run: |
+          library(arrow)
+          library(dplyr)
+          library(purrr)
+
+          season_dir <- file.path("Data", "20252026")
+          dir.create(season_dir, recursive = TRUE, showWarnings = FALSE)
+
+          pbp <- read_parquet("NHLpbp20252026full.parquet") %>%
+            mutate(
+              homeTeamId = as.integer(homeTeamId),
+              visitingTeamId = as.integer(visitingTeamId)
+            )
+
+          team_ids <- sort(unique(c(pbp$homeTeamId, pbp$visitingTeamId)))
+          team_ids <- team_ids[!is.na(team_ids)]
+
+          walk(team_ids, function(team_id) {
+            team_pbp <- pbp %>%
+              filter(homeTeamId == team_id | visitingTeamId == team_id)
+
+            team_dir <- file.path(season_dir, paste0("team_", team_id))
+            dir.create(team_dir, recursive = TRUE, showWarnings = FALSE)
+
+            write_parquet(
+              team_pbp,
+              file.path(team_dir, "pbp.parquet")
+            )
+
+            message(
+              "Wrote pbp for team ",
+              team_id,
+              " (",
+              nrow(team_pbp),
+              " rows)"
+            )
+          })
+
+      - name: Commit changes
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Data/20252026
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Split 20252026 play-by-play file by team"
+            git push
+          fi
