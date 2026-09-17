@@ -1,0 +1,135 @@
+name: Temp Split Game Odds Open Close
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  split-gameodds:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repo
+        uses: actions/checkout@v5
+
+      - name: Set up R
+        uses: r-lib/actions/setup-r@v2
+
+      - name: Install R packages
+        uses: r-lib/actions/setup-r-dependencies@v2
+        with:
+          packages: |
+            arrow
+            dplyr
+            purrr
+
+      - name: Split game odds parquet
+        shell: Rscript {0}
+        run: |
+          library(arrow)
+          library(dplyr)
+          library(purrr)
+
+          gameodds <- read_parquet(
+            "nonplayerprops_open-close_24-26.parquet"
+          ) %>%
+            mutate(
+              seasonId = as.character(seasonId),
+              homeTeamId = as.integer(homeTeamId),
+              awayTeamId = as.integer(awayTeamId)
+            ) %>%
+            filter(
+              !is.na(seasonId),
+              !is.na(homeTeamId),
+              !is.na(awayTeamId)
+            )
+
+          seasons <- sort(unique(gameodds$seasonId))
+
+          message(
+            "Seasons found: ",
+            paste(seasons, collapse = ", ")
+          )
+
+          walk(seasons, function(current_season) {
+
+            season_data <- gameodds %>%
+              filter(
+                seasonId == .env$current_season
+              )
+
+            team_ids <- sort(
+              unique(
+                c(
+                  season_data$homeTeamId,
+                  season_data$awayTeamId
+                )
+              )
+            )
+
+            team_ids <- team_ids[!is.na(team_ids)]
+
+            message(
+              "Season ",
+              current_season,
+              " has ",
+              length(team_ids),
+              " teams."
+            )
+
+            walk(team_ids, function(current_team) {
+
+              team_data <- season_data %>%
+                filter(
+                  homeTeamId == .env$current_team |
+                  awayTeamId == .env$current_team
+                )
+
+              team_dir <- file.path(
+                "Data",
+                current_season,
+                paste0("team_", current_team)
+              )
+
+              dir.create(
+                team_dir,
+                recursive = TRUE,
+                showWarnings = FALSE
+              )
+
+              output_file <- file.path(
+                team_dir,
+                "gameodds_oc.parquet"
+              )
+
+              write_parquet(
+                team_data,
+                output_file,
+                compression = "zstd"
+              )
+
+              message(
+                "Wrote ",
+                nrow(team_data),
+                " rows -> ",
+                output_file
+              )
+            })
+          })
+
+      - name: Commit split game odds files
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          git add Data
+          git status --short
+
+          if git diff --staged --quiet; then
+            echo "No changes to commit."
+          else
+            git commit -m "Split game odds open-close by season and team"
+            git push
+          fi
